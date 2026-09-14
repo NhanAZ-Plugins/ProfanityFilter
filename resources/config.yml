@@ -18,4 +18,14 @@ characterReplaced: "*"
 
 # Show profanity on the console
 showProfanity: true
+
+# Temporarily block players who repeatedly use profanity
+violationMode: true
+
+# Number of profanity messages before the player is muted
+# Set to 0 to disable the violation counter
+maxViolations: 3
+
+# Mute duration in seconds after reaching maxViolations
+muteDuration: 60
 ...

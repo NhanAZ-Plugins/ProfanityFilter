@@ -19,6 +19,12 @@ class ProfanityFilter extends PluginBase {
 
 	protected Config $profanities;
 
+	/** @var array<string, int> */
+	private array $violations = [];
+
+	/** @var array<string, int> */
+	private array $mutedUntil = [];
+
 	private static Language $language;
 
 	private array $languages = [
@@ -86,6 +92,76 @@ class ProfanityFilter extends PluginBase {
 
 	public function getShowProfanity(): bool {
 		return (bool) $this->config->get("showProfanity", true);
+	}
+
+	public function getViolationMode(): bool {
+		return (bool) $this->config->get("violationMode", true);
+	}
+
+	public function getMaxViolations(): int {
+		return max(0, (int) $this->config->get("maxViolations", 3));
+	}
+
+	public function getMuteDuration(): int {
+		return max(0, (int) $this->config->get("muteDuration", 60));
+	}
+
+	public function isPlayerMuted(Player $player): bool {
+		if (!$this->getViolationMode()) {
+			return false;
+		}
+
+		$key = $this->getPlayerKey($player);
+		if (!isset($this->mutedUntil[$key])) {
+			return false;
+		}
+
+		if ($this->mutedUntil[$key] <= time()) {
+			unset($this->mutedUntil[$key]);
+			return false;
+		}
+
+		return true;
+	}
+
+	public function registerViolation(Player $player): bool {
+		$maxViolations = $this->getMaxViolations();
+		$muteDuration = $this->getMuteDuration();
+		if (!$this->getViolationMode() || $maxViolations < 1 || $muteDuration < 1) {
+			return false;
+		}
+
+		$key = $this->getPlayerKey($player);
+		$currentViolations = ($this->violations[$key] ?? 0) + 1;
+		if ($currentViolations < $maxViolations) {
+			$this->violations[$key] = $currentViolations;
+			return false;
+		}
+
+		unset($this->violations[$key]);
+		$this->mutedUntil[$key] = time() + $muteDuration;
+		return true;
+	}
+
+	public function getMuteRemaining(Player $player): int {
+		$key = $this->getPlayerKey($player);
+		$remaining = ($this->mutedUntil[$key] ?? 0) - time();
+		if ($remaining <= 0) {
+			unset($this->mutedUntil[$key]);
+			return 0;
+		}
+
+		return $remaining;
+	}
+
+	public function sendMuteMessage(Player $player): void {
+		$muteMessage = ProfanityFilter::getLanguage()->translateString("mute.message");
+		$muteMessage = str_replace("{duration}", strval($this->getMuteRemaining($player)), $muteMessage);
+		$player->sendMessage(TextFormat::colorize($this->getPrefix() . $muteMessage));
+	}
+
+	private function getPlayerKey(Player $player): string {
+		return strtolower($player->getName());
 	}
 
 	public function containsProfanity(string $msg): bool {

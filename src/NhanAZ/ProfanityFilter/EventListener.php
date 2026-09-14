@@ -18,11 +18,22 @@ class EventListener implements Listener {
 		$msg = $event->getMessage();
 		$player = $event->getPlayer();
 		if (!$player->hasPermission("profanityfilter.bypass")) {
+			if ($this->profanityFilter->isPlayerMuted($player)) {
+				$event->cancel();
+				$this->profanityFilter->sendMuteMessage($player);
+				return;
+			}
+
 			if ($this->profanityFilter->containsProfanity($msg)) {
 				$this->profanityFilter->warningPlayer($player);
 				$this->profanityFilter->showProfanity($player, $msg);
 				$filteredMsg = $this->profanityFilter->handleMessage($msg);
 				$event->setMessage($filteredMsg);
+
+				if ($this->profanityFilter->registerViolation($player)) {
+					$event->cancel();
+					$this->profanityFilter->sendMuteMessage($player);
+				}
 			}
 		}
 	}
