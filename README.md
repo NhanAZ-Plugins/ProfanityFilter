@@ -92,7 +92,7 @@ Other plugins can obtain the singleton instance and use the public methods on
 
 - `containsProfanity(string $message): bool`
 - `handleMessage(string $message): string`
-- `getProfanities(): mixed`
+- `getProfanities(): array`
 - `isPlayerMuted(Player $player): bool`
 - `getMuteRemaining(Player $player): int`
 

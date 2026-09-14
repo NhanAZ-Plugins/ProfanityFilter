@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace NhanAZ\ProfanityFilter;
 
+use pocketmine\event\Listener;
 use pocketmine\lang\Language;
 use pocketmine\player\Player;
 use pocketmine\plugin\PluginBase;
@@ -11,219 +12,209 @@ use pocketmine\utils\Config;
 use pocketmine\utils\SingletonTrait;
 use pocketmine\utils\TextFormat;
 
-class ProfanityFilter extends PluginBase {
+final class ProfanityFilter extends PluginBase {
 
 	use SingletonTrait;
 
-	protected Config $config;
+	public const BYPASS_PERMISSION = "profanityfilter.bypass";
 
-	protected Config $profanities;
+	private const DEFAULT_LANGUAGE = "eng";
+	private const DEFAULT_PREFIX = "&f[&cProfanityFilter&f]&r ";
+	private const DEFAULT_WARNING_MESSAGE = "{playerName} > {msg}";
+	private const DEFAULT_CHARACTER_REPLACED = "*";
+	private const DEFAULT_MAX_VIOLATIONS = 3;
+	private const DEFAULT_MUTE_DURATION = 60;
 
-	/** @var array<string, int> */
-	private array $violations = [];
-
-	/** @var array<string, int> */
-	private array $mutedUntil = [];
-
-	private static Language $language;
-
-	private array $languages = [
+	/** @var list<string> */
+	private const SUPPORTED_LANGUAGES = [
 		"eng",
 		"vie"
 	];
 
-	public static function getLanguage(): Language {
-		return self::$language;
-	}
+	/** @var list<string> */
+	private const DEFAULT_PROFANITIES = [
+		"wtf",
+		"đụ"
+	];
 
-	public function initLanguageFiles(string $lang, array $languageFiles): void {
-		$path = $this->getDataFolder() . "languages/";
-		if (!is_dir($path)) {
-			@mkdir($path);
-		}
-		foreach ($languageFiles as $file) {
-			if (!is_file($path . $file . ".ini")) {
-				$this->saveResource("languages/" . $file . ".ini");
-			}
-		}
-		self::$language = new Language($lang, $path);
-	}
+	private Config $profanities;
+	private Language $language;
+	private ProfanityMatcher $matcher;
+	private ViolationTracker $violationTracker;
 
 	protected function onLoad(): void {
 		self::setInstance($this);
 	}
 
-	private function initResource(): void {
-		$this->saveDefaultConfig();
-		$this->config = $this->getConfig();
-		$this->saveResource("profanities.yml");
-		$this->profanities = new Config($this->getDataFolder() . "profanities.yml", Config::YAML);
+	protected function onEnable(): void {
+		$this->loadResources();
+		$this->loadLanguage();
+		$this->matcher = new ProfanityMatcher(
+			$this->getProfanities(),
+			$this->getCharacterReplaced()
+		);
+		$this->violationTracker = new ViolationTracker();
+
+		$this->getServer()->getPluginManager()->registerEvents(
+			new EventListener($this),
+			$this
+		);
+		$this->logDevelopmentBuild();
 	}
 
-	private function checkVersion(): void {
+	private function loadResources(): void {
+		$this->saveDefaultConfig();
+		$this->saveResource("profanities.yml");
+		$this->profanities = new Config(
+			$this->getDataFolder() . "profanities.yml",
+			Config::YAML
+		);
+	}
+
+	private function loadLanguage(): void {
+		$language = strval($this->getConfig()->get("language", self::DEFAULT_LANGUAGE));
+		$this->initLanguageFiles($language, self::SUPPORTED_LANGUAGES);
+	}
+
+	public function initLanguageFiles(string $language, array $languageFiles): void {
+		$path = $this->getDataFolder() . "languages/";
+		if (!is_dir($path) && !mkdir($path, 0777, true) && !is_dir($path)) {
+			throw new \RuntimeException("Unable to create language directory: " . $path);
+		}
+
+		foreach ($languageFiles as $languageFile) {
+			if (!is_string($languageFile) || $languageFile === "") {
+				continue;
+			}
+
+			$file = $path . $languageFile . ".ini";
+			if (!is_file($file) && !$this->saveResource("languages/" . $languageFile . ".ini")) {
+				throw new \RuntimeException("Unable to save language resource: " . $languageFile);
+			}
+		}
+
+		if (!is_file($path . $language . ".ini")) {
+			$this->getLogger()->warning(
+				"Language \"" . $language . "\" was not found. Falling back to \"" . self::DEFAULT_LANGUAGE . "\"."
+			);
+			$language = self::DEFAULT_LANGUAGE;
+		}
+
+		$this->language = new Language($language, $path);
+	}
+
+	private function logDevelopmentBuild(): void {
 		if (VersionInfo::IS_DEVELOPMENT_BUILD) {
-			$isDevelopmentBuild = ProfanityFilter::getLanguage()->translateString("is.development.build");
-			$this->getLogger()->warning($isDevelopmentBuild);
+			$this->getLogger()->warning($this->translate("is.development.build"));
 		}
 	}
 
-	protected function onEnable(): void {
-		$this->getServer()->getPluginManager()->registerEvents(new EventListener($this), $this);
-		$this->initResource();
-		$this->initLanguageFiles(strval($this->config->get("language", "eng")), $this->languages);
-		$this->checkVersion();
+	public function getLanguage(): Language {
+		return $this->language;
 	}
 
 	public function getPrefix(): string {
-		return strval($this->config->get("prefix", "&f[&cProfanityFilter&f]&r "));
+		return strval($this->getConfig()->get("prefix", self::DEFAULT_PREFIX));
 	}
 
-	public function getProfanities(): mixed {
-		return $this->profanities->get("profanities", ["wtf", "đụ"]);
+	/** @return list<string> */
+	public function getProfanities(): array {
+		$profanities = $this->profanities->get("profanities", self::DEFAULT_PROFANITIES);
+		if (!is_array($profanities)) {
+			return self::DEFAULT_PROFANITIES;
+		}
+
+		return array_values(array_filter(
+			$profanities,
+			static fn(mixed $profanity): bool => is_string($profanity) && $profanity !== ""
+		));
 	}
 
 	public function getWarningMode(): bool {
-		return (bool) $this->config->get("warningMode", true);
+		return (bool) $this->getConfig()->get("warningMode", true);
 	}
 
 	public function getCharacterReplaced(): string {
-		return strval($this->config->get("characterReplaced", "*"));
+		return strval($this->getConfig()->get("characterReplaced", self::DEFAULT_CHARACTER_REPLACED));
 	}
 
 	public function getShowProfanity(): bool {
-		return (bool) $this->config->get("showProfanity", true);
+		return (bool) $this->getConfig()->get("showProfanity", true);
 	}
 
 	public function getViolationMode(): bool {
-		return (bool) $this->config->get("violationMode", true);
+		return (bool) $this->getConfig()->get("violationMode", true);
 	}
 
 	public function getMaxViolations(): int {
-		return max(0, (int) $this->config->get("maxViolations", 3));
+		return max(0, (int) $this->getConfig()->get("maxViolations", self::DEFAULT_MAX_VIOLATIONS));
 	}
 
 	public function getMuteDuration(): int {
-		return max(0, (int) $this->config->get("muteDuration", 60));
+		return max(0, (int) $this->getConfig()->get("muteDuration", self::DEFAULT_MUTE_DURATION));
 	}
 
 	public function isPlayerMuted(Player $player): bool {
-		if (!$this->getViolationMode()) {
-			return false;
-		}
-
-		$key = $this->getPlayerKey($player);
-		if (!isset($this->mutedUntil[$key])) {
-			return false;
-		}
-
-		if ($this->mutedUntil[$key] <= time()) {
-			unset($this->mutedUntil[$key]);
-			return false;
-		}
-
-		return true;
+		return $this->violationTracker->isMuted(
+			$this->getPlayerKey($player),
+			$this->getViolationMode()
+		);
 	}
 
 	public function registerViolation(Player $player): bool {
-		$maxViolations = $this->getMaxViolations();
-		$muteDuration = $this->getMuteDuration();
-		if (!$this->getViolationMode() || $maxViolations < 1 || $muteDuration < 1) {
-			return false;
-		}
-
-		$key = $this->getPlayerKey($player);
-		$currentViolations = ($this->violations[$key] ?? 0) + 1;
-		if ($currentViolations < $maxViolations) {
-			$this->violations[$key] = $currentViolations;
-			return false;
-		}
-
-		unset($this->violations[$key]);
-		$this->mutedUntil[$key] = time() + $muteDuration;
-		return true;
+		return $this->violationTracker->register(
+			$this->getPlayerKey($player),
+			$this->getViolationMode(),
+			$this->getMaxViolations(),
+			$this->getMuteDuration()
+		);
 	}
 
 	public function getMuteRemaining(Player $player): int {
-		$key = $this->getPlayerKey($player);
-		$remaining = ($this->mutedUntil[$key] ?? 0) - time();
-		if ($remaining <= 0) {
-			unset($this->mutedUntil[$key]);
-			return 0;
-		}
-
-		return $remaining;
+		return $this->violationTracker->getRemaining($this->getPlayerKey($player));
 	}
 
 	public function sendMuteMessage(Player $player): void {
-		$muteMessage = ProfanityFilter::getLanguage()->translateString("mute.message");
-		$muteMessage = str_replace("{duration}", strval($this->getMuteRemaining($player)), $muteMessage);
-		$player->sendMessage(TextFormat::colorize($this->getPrefix() . $muteMessage));
+		$message = $this->translate("mute.message", [
+			"{duration}" => strval($this->getMuteRemaining($player))
+		]);
+		$player->sendMessage(TextFormat::colorize($this->getPrefix() . $message));
+	}
+
+	public function containsProfanity(string $message): bool {
+		return $this->matcher->contains($message);
+	}
+
+	public function warningPlayer(Player $player): void {
+		if (!$this->getWarningMode()) {
+			return;
+		}
+
+		$message = $this->translate("warning.message");
+		$player->sendMessage(TextFormat::colorize($this->getPrefix() . $message));
+	}
+
+	public function handleMessage(string $message): string {
+		return $this->matcher->filter($message);
+	}
+
+	public function showProfanity(Player $player, string $message): void {
+		if (!$this->getShowProfanity()) {
+			return;
+		}
+
+		$format = strval($this->getConfig()->get("warningMessage", self::DEFAULT_WARNING_MESSAGE));
+		$this->getLogger()->info(strtr($format, [
+			"{playerName}" => $player->getName(),
+			"{msg}" => $message
+		]));
+	}
+
+	private function translate(string $key, array $replacements = []): string {
+		return strtr($this->language->translateString($key), $replacements);
 	}
 
 	private function getPlayerKey(Player $player): string {
 		return strtolower($player->getName());
-	}
-
-	public function containsProfanity(string $msg): bool {
-		$profanities = (array) $this->getProfanities();
-		$filterCount = sizeof($profanities);
-		for ($i = 0; $i < $filterCount; $i++) {
-			$condition = preg_match('/' . $profanities[$i] . '/iu', $msg) > 0;
-			if ($condition) {
-				return true;
-			}
-		}
-		return false;
-	}
-
-	public function warningPlayer(Player $player): void {
-		if ($this->getWarningMode()) {
-			$prefix = $this->getPrefix();
-			$warningMessage = ProfanityFilter::getLanguage()->translateString("warning.message");
-			$colorize = TextFormat::colorize($prefix . $warningMessage);
-			$player->sendMessage($colorize);
-		}
-	}
-
-	public function handleMessage(string $msg): string {
-		foreach ((array) $this->getProfanities() as $profanity) {
-			if (!is_string($profanity) || $profanity === "") {
-				continue;
-			}
-
-			$replacement = str_repeat(
-				$this->getCharacterReplaced(),
-				mb_strlen($profanity, "UTF-8")
-			);
-			$filteredMsg = preg_replace(
-				"/" . $profanity . "/iu",
-				$replacement,
-				$msg
-			);
-
-			// Keep the original message when a configured pattern is invalid.
-			if ($filteredMsg !== null) {
-				$msg = $filteredMsg;
-			}
-		}
-
-		return $msg;
-	}
-
-	public function showProfanity(Player $player, string $msg) {
-		if ($this->getShowProfanity()) {
-			$warningMessage = $this->config->get("warningMessage", "{playerName} > {msg}");
-			// TODO: Implement InfoAPI Here (Help Wanted)
-			$search = [
-				"{playerName}",
-				"{msg}"
-			];
-			$replace = [
-				$player->getName(),
-				$msg
-			];
-			$subject = $warningMessage;
-			$this->getLogger()->info(str_replace($search, $replace, strval($subject)));
-		}
 	}
 }
