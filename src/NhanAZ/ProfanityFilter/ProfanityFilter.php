@@ -110,22 +110,28 @@ class ProfanityFilter extends PluginBase {
 	}
 
 	public function handleMessage(string $msg): string {
-		$profanities = $this->getProfanities();
-		$callback = function (string $profanities): string {
-			$character = $this->getCharacterReplaced();
-			$search = $profanities;
-			$replace = str_repeat(strval($character), mb_strlen($profanities, "utf8"));
-			$subject = $profanities;
-			$profanities = str_replace($search, $replace, $subject);
-			return $profanities;
-		};
-		$array = $profanities;
-		$search = $profanities;
-		$replace = array_map(strval($callback), (array) $array);
-		$subject = strtolower($msg);
-		// TODO: Use preg_replace instead of str_replace (Help Wanted)
-		$filteredMsg = str_replace((array) $search, $replace, $subject);
-		return $filteredMsg;
+		foreach ((array) $this->getProfanities() as $profanity) {
+			if (!is_string($profanity) || $profanity === "") {
+				continue;
+			}
+
+			$replacement = str_repeat(
+				$this->getCharacterReplaced(),
+				mb_strlen($profanity, "UTF-8")
+			);
+			$filteredMsg = preg_replace(
+				"/" . $profanity . "/iu",
+				$replacement,
+				$msg
+			);
+
+			// Keep the original message when a configured pattern is invalid.
+			if ($filteredMsg !== null) {
+				$msg = $filteredMsg;
+			}
+		}
+
+		return $msg;
 	}
 
 	public function showProfanity(Player $player, string $msg) {
