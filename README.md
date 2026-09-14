@@ -16,8 +16,8 @@ after repeated violations.
 
 ## Requirements
 
-- PocketMine-MP API 4.0.0 or newer.
-- PHP 8.0 or newer, as required by PocketMine-MP API 4.
+- PocketMine-MP API 5.0.0 or newer.
+- PHP 8.1 or newer, as required by PocketMine-MP API 5.
 
 ## Installation
 
