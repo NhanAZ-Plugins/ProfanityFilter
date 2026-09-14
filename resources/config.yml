@@ -1,9 +1,4 @@
 ---
-# Available languages:
-# eng (English)
-# vie (Tiếng Việt)
-language: "eng"
-
 # Plugin's prefix
 prefix: "&f[&cProfanityFilter&f]&r "
 
