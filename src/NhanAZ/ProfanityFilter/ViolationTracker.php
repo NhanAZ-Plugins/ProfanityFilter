@@ -42,7 +42,8 @@ final class ViolationTracker {
 		}
 
 		unset($this->violations[$playerKey]);
-		$this->mutedUntil[$playerKey] = time() + $muteDuration;
+		$now = time();
+		$this->mutedUntil[$playerKey] = $muteDuration > PHP_INT_MAX - $now ? PHP_INT_MAX : $now + $muteDuration;
 		return true;
 	}
 

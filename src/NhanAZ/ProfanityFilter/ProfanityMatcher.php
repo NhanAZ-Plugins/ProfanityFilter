@@ -9,17 +9,53 @@ final class ProfanityMatcher {
 	/** @var list<string> */
 	private readonly array $patterns;
 
+	/** @var list<string> */
+	private readonly array $invalidPatterns;
+
+	/** @param list<string> $patterns */
 	public function __construct(array $patterns, private readonly string $replacementCharacter) {
-		$this->patterns = array_values(array_filter(
-			$patterns,
-			static fn(mixed $pattern): bool => is_string($pattern) && $pattern !== ""
-		));
+		$valid = [];
+		$invalid = [];
+		foreach ($patterns as $pattern) {
+			if ($pattern === "") {
+				continue;
+			}
+			$delimiter = null;
+			foreach (["~", "#", "%", "!", "/"] as $candidate) {
+				if (!str_contains($pattern, $candidate)) {
+					$delimiter = $candidate;
+					break;
+				}
+			}
+			if ($delimiter === null) {
+				$invalid[] = $pattern;
+				continue;
+			}
+			$regex = $delimiter . $pattern . $delimiter . "iu";
+			$emptyMatch = @preg_match($regex, "");
+			if ($emptyMatch === false || $emptyMatch === 1) {
+				$invalid[] = $pattern;
+				continue;
+			}
+			$valid[] = $regex;
+		}
+		$this->patterns = $valid;
+		$this->invalidPatterns = $invalid;
+	}
+
+	/** @return list<string> */
+	public function getInvalidPatterns(): array {
+		return $this->invalidPatterns;
 	}
 
 	public function contains(string $message): bool {
-		foreach ($this->patterns as $pattern) {
-			if (preg_match($this->buildPattern($pattern), $message) === 1) {
-				return true;
+		foreach ($this->patterns as $regex) {
+			if (preg_match_all($regex, $message, $matches) > 0) {
+				foreach ($matches[0] as $match) {
+					if ($match !== "") {
+						return true;
+					}
+				}
 			}
 		}
 
@@ -27,27 +63,17 @@ final class ProfanityMatcher {
 	}
 
 	public function filter(string $message): string {
-		foreach ($this->patterns as $pattern) {
-			$replacement = str_repeat(
-				$this->replacementCharacter,
-				mb_strlen($pattern, "UTF-8")
-			);
-			$filteredMessage = preg_replace(
-				$this->buildPattern($pattern),
-				$replacement,
+		foreach ($this->patterns as $regex) {
+			$filteredMessage = preg_replace_callback(
+				$regex,
+				fn(array $match): string => $match[0] === "" ? "" : str_repeat($this->replacementCharacter, mb_strlen($match[0], "UTF-8")),
 				$message
 			);
-
-			// Keep the current message when a configured pattern is invalid.
 			if ($filteredMessage !== null) {
 				$message = $filteredMessage;
 			}
 		}
 
 		return $message;
-	}
-
-	private function buildPattern(string $pattern): string {
-		return "/" . $pattern . "/iu";
 	}
 }

@@ -5,7 +5,4 @@ branches:
 projects:
   ProfanityFilter:
     path: ""
-    icon: "assets/images/icon.png"
-    lint:
-      phpstan: false
 ...

@@ -45,6 +45,10 @@ final class ProfanityFilter extends PluginBase {
 			$this->getProfanities(),
 			$this->getCharacterReplaced()
 		);
+		$invalidCount = count($this->matcher->getInvalidPatterns());
+		if ($invalidCount > 0) {
+			$this->getLogger()->warning("Ignored $invalidCount invalid or empty-match profanity patterns");
+		}
 		$this->violationTracker = new ViolationTracker();
 
 		$this->getServer()->getPluginManager()->registerEvents(
@@ -63,7 +67,7 @@ final class ProfanityFilter extends PluginBase {
 	}
 
 	public function getPrefix(): string {
-		return strval($this->getConfig()->get("prefix", self::DEFAULT_PREFIX));
+		return $this->getStringSetting("prefix", self::DEFAULT_PREFIX);
 	}
 
 	/** @return list<string> */
@@ -80,27 +84,28 @@ final class ProfanityFilter extends PluginBase {
 	}
 
 	public function getWarningMode(): bool {
-		return (bool) $this->getConfig()->get("warningMode", true);
+		return $this->getBooleanSetting("warningMode", true);
 	}
 
 	public function getCharacterReplaced(): string {
-		return strval($this->getConfig()->get("characterReplaced", self::DEFAULT_CHARACTER_REPLACED));
+		$value = $this->getStringSetting("characterReplaced", self::DEFAULT_CHARACTER_REPLACED);
+		return $value !== "" ? $value : self::DEFAULT_CHARACTER_REPLACED;
 	}
 
 	public function getShowProfanity(): bool {
-		return (bool) $this->getConfig()->get("showProfanity", true);
+		return $this->getBooleanSetting("showProfanity", true);
 	}
 
 	public function getViolationMode(): bool {
-		return (bool) $this->getConfig()->get("violationMode", true);
+		return $this->getBooleanSetting("violationMode", true);
 	}
 
 	public function getMaxViolations(): int {
-		return max(0, (int) $this->getConfig()->get("maxViolations", self::DEFAULT_MAX_VIOLATIONS));
+		return $this->getNonNegativeIntegerSetting("maxViolations", self::DEFAULT_MAX_VIOLATIONS);
 	}
 
 	public function getMuteDuration(): int {
-		return max(0, (int) $this->getConfig()->get("muteDuration", self::DEFAULT_MUTE_DURATION));
+		return $this->getNonNegativeIntegerSetting("muteDuration", self::DEFAULT_MUTE_DURATION);
 	}
 
 	public function isPlayerMuted(Player $player): bool {
@@ -153,7 +158,7 @@ final class ProfanityFilter extends PluginBase {
 			return;
 		}
 
-		$format = strval($this->getConfig()->get("warningMessage", self::DEFAULT_WARNING_MESSAGE));
+		$format = $this->getStringSetting("warningMessage", self::DEFAULT_WARNING_MESSAGE);
 		$this->getLogger()->info(strtr($format, [
 			"{playerName}" => $player->getName(),
 			"{msg}" => $message
@@ -162,5 +167,30 @@ final class ProfanityFilter extends PluginBase {
 
 	private function getPlayerKey(Player $player): string {
 		return strtolower($player->getName());
+	}
+
+	private function getStringSetting(string $key, string $default): string {
+		$value = $this->getConfig()->get($key, $default);
+		return is_string($value) ? $value : $default;
+	}
+
+	private function getBooleanSetting(string $key, bool $default): bool {
+		$value = $this->getConfig()->get($key, $default);
+		if (is_bool($value)) {
+			return $value;
+		}
+		if (is_string($value)) {
+			return filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? $default;
+		}
+		return $default;
+	}
+
+	private function getNonNegativeIntegerSetting(string $key, int $default): int {
+		$value = $this->getConfig()->get($key, $default);
+		if (!is_int($value) && !is_string($value)) {
+			return $default;
+		}
+		$parsed = filter_var($value, FILTER_VALIDATE_INT, ['options' => ['min_range' => 0]]);
+		return $parsed !== false ? $parsed : $default;
 	}
 }

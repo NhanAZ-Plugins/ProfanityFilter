@@ -1,11 +1,11 @@
 ---
 name: ProfanityFilter
-version: 1.0.0
+version: 1.0.1
 main: NhanAZ\ProfanityFilter\ProfanityFilter
 api: 5.0.0
 
-website: github.com/nhanaz-pm-pl/ProfanityFilter
-description: Powerful Profanity Filter Plugin For PocketMine-MP Servers
+website: https://github.com/NhanAZ-Plugins/ProfanityFilter
+description: Mask configured chat patterns and temporarily mute repeat violations
 author: NhanAZ
 
 permissions:
