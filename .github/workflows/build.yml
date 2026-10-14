@@ -17,9 +17,9 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Check out ProfanityFilter source
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - name: Check out Axolotl-PM PHP setup helper
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: axolotl-pm/setup-php-action
           ref: b8c3f9add4f2ad4a5e2624a1112aba899ee8db0e
@@ -37,7 +37,7 @@ jobs:
 
   build:
     needs: test
-    uses: NhanAZ/DevTools/.github/workflows/build-plugin.yml@6606444fc32787a3e50275fdb668c2310e899740
+    uses: NhanAZ/DevTools/.github/workflows/build-plugin.yml@8d13a75aaf4f330fdbd93737d58be9cacc41e262
     with:
       axolotl-ref: dfe0d07e48a9e8d5a4a242fa43ff1cd3b743a955
       phpstan: max
