@@ -51,7 +51,7 @@ The main `config.yml` settings control these behaviors.
 
 ## Build and verification
 
-The [workflow](.github/workflows/build.yml) runs the filter and violation fixture, PHPStan at maximum level, and a PHAR build with [DevTools](https://github.com/NhanAZ/DevTools). DevTools and Axolotl-PM source are pinned to reviewed revisions in CI. The verified PHAR is available as a workflow artifact before a stable release is created.
+The [workflow](.github/workflows/build.yml) runs the filter and violation fixture, PHPStan at maximum level, and a PHAR build with [DevTools](https://github.com/AxolotlBucketLabs/DevTools). DevTools and Axolotl-PM source are pinned to reviewed revisions in CI. The verified PHAR is available as a workflow artifact before a stable release is created.
 
 Run `php tests/filter-behavior.php` to check the matcher and mute counter locally. The retained Poggit manifest serves existing development-build consumers. GitHub Releases contain stable artifacts after their release checks pass.
 
